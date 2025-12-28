@@ -33,9 +33,11 @@ func (d *Decoder) decode(v any) error {
 }
 
 type headerField struct {
-	name string
-	typ  string // i, i+, b, s, =, inferred
-	val  string // for constant or enum
+	name    string
+	typ     string
+	val     string
+	indexed bool
+	options []string
 }
 
 func (d *Decoder) decodeTabular(data []byte, rv reflect.Value) error {
@@ -97,10 +99,10 @@ func (d *Decoder) decodeTabular(data []byte, rv reflect.Value) error {
 
 		// Expand alias
 		// Split name from type
-		sepIdx := strings.IndexAny(part, ":=")
+		sepIdx := strings.IndexAny(part, ":=!")
 		if sepIdx == -1 {
 			continue
-		} // Invalid?
+		}
 
 		name := part[:sepIdx]
 		typVal := part[sepIdx:] // includes separator
@@ -141,7 +143,12 @@ func (d *Decoder) decodeTabular(data []byte, rv reflect.Value) error {
 			constants = append(constants, hf)
 		} else {
 			if sep == '=' {
-				hf.typ = "s" // enum really
+				hf.typ = "s"
+				hf.options = strings.Split(suffix, "|")
+			} else if sep == '!' {
+				hf.typ = "s"
+				hf.indexed = true
+				hf.options = strings.Split(suffix, "|")
 			} else {
 				hf.typ = suffix
 			}
@@ -196,6 +203,12 @@ func (d *Decoder) decodeTabular(data []byte, rv reflect.Value) error {
 
 			if valStr == "~" {
 				continue
+			}
+
+			if h.indexed && len(h.options) > 0 {
+				if idx, err := strconv.Atoi(valStr); err == nil && idx >= 0 && idx < len(h.options) {
+					valStr = h.options[idx]
+				}
 			}
 
 			if err := setDeepField(newElem, h.name, h.typ, valStr); err != nil {

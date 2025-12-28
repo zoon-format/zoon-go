@@ -82,6 +82,8 @@ type columnStats struct {
 	values     []string
 	uniqueVals map[string]bool
 	isSeq      bool
+	indexed    bool
+	enumKeys   []string
 }
 
 func detectAliases(keys []string) map[string]string {
@@ -346,13 +348,30 @@ func (e *Encoder) encodeTabular(slice reflect.Value) error {
 					}
 				}
 				sort.Strings(keys)
-				if len(keys) > 0 {
+				if len(keys) >= 3 {
+					avgLen := 0
+					for _, k := range keys {
+						avgLen += len(k)
+					}
+					avgLen = avgLen / len(keys)
+					literalCost := avgLen * length
+					indexCost := len(strings.Join(keys, "|")) + length*2
+					if literalCost > indexCost {
+						typeCode = "!" + strings.Join(keys, "|")
+						st.indexed = true
+						st.enumKeys = keys
+					} else {
+						typeCode = "=" + strings.Join(keys, "|")
+						st.enumKeys = keys
+					}
+				} else if len(keys) > 0 {
 					typeCode = "=" + strings.Join(keys, "|")
+					st.enumKeys = keys
 				}
 			}
 		}
 
-		if strings.HasPrefix(typeCode, "=") {
+		if strings.HasPrefix(typeCode, "=") || strings.HasPrefix(typeCode, "!") {
 			headerParts = append(headerParts, aliased+typeCode)
 		} else {
 			headerParts = append(headerParts, fmt.Sprintf("%s:%s", aliased, typeCode))
@@ -431,6 +450,13 @@ func (e *Encoder) encodeTabular(slice reflect.Value) error {
 					sVal = "1"
 				} else if sVal == "false" {
 					sVal = "0"
+				}
+			} else if stats[k].indexed && len(stats[k].enumKeys) > 0 {
+				for idx, enumVal := range stats[k].enumKeys {
+					if sVal == enumVal {
+						sVal = fmt.Sprintf("%d", idx)
+						break
+					}
 				}
 			}
 			outRow = append(outRow, sVal)
