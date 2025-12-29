@@ -240,7 +240,7 @@ func (d *Decoder) decodeTabular(data []byte, rv reflect.Value) error {
 			continue
 		}
 
-		vals := strings.Fields(line)
+		vals := tokenizeRow(line)
 		if err := processRow(vals); err != nil {
 			return err
 		}
@@ -340,6 +340,49 @@ func (p *inlineParser) skipSpace() {
 	for p.pos < len(p.input) && (p.input[p.pos] == ' ' || p.input[p.pos] == '\n') {
 		p.pos++
 	}
+}
+
+func tokenizeRow(line string) []string {
+	var tokens []string
+	i := 0
+	for i < len(line) {
+		for i < len(line) && line[i] == ' ' {
+			i++
+		}
+		if i >= len(line) {
+			break
+		}
+		if line[i] == '"' {
+			end := i + 1
+			for end < len(line) {
+				if line[end] == '\\' && end+1 < len(line) {
+					end += 2
+				} else if line[end] == '"' {
+					end++
+					break
+				} else {
+					end++
+				}
+			}
+			tokens = append(tokens, line[i+1:end-1])
+			i = end
+		} else if line[i] == '[' {
+			end := i + 1
+			for end < len(line) && line[end] != ']' {
+				end++
+			}
+			tokens = append(tokens, line[i:end+1])
+			i = end + 1
+		} else {
+			end := i
+			for end < len(line) && line[end] != ' ' {
+				end++
+			}
+			tokens = append(tokens, line[i:end])
+			i = end
+		}
+	}
+	return tokens
 }
 
 func setDeepField(dest reflect.Value, path, typ, valStr string) error {

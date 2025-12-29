@@ -84,6 +84,7 @@ type columnStats struct {
 	isSeq      bool
 	indexed    bool
 	enumKeys   []string
+	isText     bool
 }
 
 func detectAliases(keys []string) map[string]string {
@@ -368,6 +369,15 @@ func (e *Encoder) encodeTabular(slice reflect.Value) error {
 					typeCode = "=" + strings.Join(keys, "|")
 					st.enumKeys = keys
 				}
+			} else {
+				totalLen := 0
+				for _, v := range st.values {
+					totalLen += len(v)
+				}
+				if len(st.values) > 0 && totalLen/len(st.values) > 30 {
+					typeCode = "t"
+					st.isText = true
+				}
 			}
 		}
 
@@ -458,6 +468,14 @@ func (e *Encoder) encodeTabular(slice reflect.Value) error {
 						break
 					}
 				}
+			} else if stats[k].isText {
+				rawStr := ""
+				if s, ok := rawVal.(string); ok {
+					rawStr = s
+				} else {
+					rawStr = fmt.Sprintf("%v", rawVal)
+				}
+				sVal = `"` + strings.ReplaceAll(rawStr, `"`, `\"`) + `"`
 			}
 			outRow = append(outRow, sVal)
 		}
